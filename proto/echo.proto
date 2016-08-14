@@ -1,0 +1,13 @@
+syntax = "proto3";
+package proto;
+service EchoService{
+    rpc Echo(stream Hello) returns (stream EchoHello){}
+}
+
+message Hello {
+    string msg = 1;
+}
+
+message EchoHello {
+    string echomsg = 2;
+}
