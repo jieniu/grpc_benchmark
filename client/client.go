@@ -5,29 +5,33 @@ import (
 	"os/signal"
 	"syscall"
 
+	"flag"
 	"fmt"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
 	pb "grpc_bs_benchmark/proto"
+	"math/rand"
 	"net"
 	"sync"
-	//"sync/atomic"
 	"time"
 )
 
 var (
-	max_clients = 30000
+	max_clients = 60000
 	max_packtes = 10000
+	Index       int
 )
 
+func init() {
+	flag.IntVar(&Index, "interface", 0, "assign net interface index")
+}
+
 func mydial(addr string, t time.Duration) (net.Conn, error) {
-	var ief, _ = net.InterfaceByName("lo")
+	var ief, _ = net.InterfaceByName("eth0")
 	var addrs, _ = ief.Addrs()
-	//fmt.Println("net addr=", addrs[0])
-	//fmt.Println("remote addr=", addr)
 	var netaddr = &net.TCPAddr{
-		IP: addrs[0].(*net.IPNet).IP,
+		IP: addrs[Index].(*net.IPNet).IP,
 	}
 	dialer := net.Dialer{LocalAddr: netaddr}
 	return dialer.Dial("tcp4", addr)
@@ -36,11 +40,15 @@ func mydial(addr string, t time.Duration) (net.Conn, error) {
 func client_stream(wg *sync.WaitGroup, chann chan int) {
 	defer wg.Done()
 	var opts []grpc.DialOption
+	var h = new(pb.Hello)
+	var err error
+	var close bool
+	var conn *grpc.ClientConn
 	opts = append(opts, grpc.WithInsecure())
 	opts = append(opts, grpc.WithDialer(mydial))
-	conn, err := grpc.Dial("localhost:6666", opts...)
+	conn, err = grpc.Dial("10.10.191.7:6666", opts...)
 	if err != nil {
-		grpclog.Fatalf("failed to dial server")
+		grpclog.Printf("failed to dial server, %v\n", err)
 		return
 	}
 	defer conn.Close()
@@ -48,25 +56,32 @@ func client_stream(wg *sync.WaitGroup, chann chan int) {
 
 	stream, err := client.Echo(context.Background())
 	if err != nil {
-		grpclog.Fatalf("get stream error")
+		grpclog.Printf("get stream error %s\n", err)
+		return
 	}
+
+	var sec time.Duration
+	sec = (time.Duration)(rand.Intn(10) + 1)
+	time.Sleep(sec * time.Second)
+
 	for i := 0; i < max_packtes; i++ {
 		// send
-		h := new(pb.Hello)
+
 		h.Msg = "hello grpc"
 		err = stream.Send(h)
 		if err != nil {
-			grpclog.Fatalf("send erroor")
+			grpclog.Printf("send erroor, %v\n", err)
 			return
 		}
 		// recv
-		_, err := stream.Recv()
+		_, err = stream.Recv()
 		if err != nil {
-			grpclog.Fatalf("recv error")
+			grpclog.Printf("recv error, %v\n", err)
+			return
 		}
 
 		// break or sleep
-		close := false
+		close = false
 		select {
 		case <-chann:
 			close = true
@@ -110,6 +125,8 @@ func StartSignal(channs []chan int) {
 }
 
 func main() {
+	flag.Parse()
+
 	var channs []chan int
 	for i := 0; i < max_clients; i++ {
 		chann := make(chan int)
