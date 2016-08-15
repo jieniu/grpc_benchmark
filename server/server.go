@@ -62,12 +62,12 @@ func perf() {
 }
 
 func main() {
-	runtime.GOMAXPROCS(runtime.NumCPU())
 	lis, err := net.Listen("tcp4", fmt.Sprintf("0.0.0.0:%d", 6666))
 	if err != nil {
 		grpclog.Fatalf("failed to listen 6666: %v", err)
 		return
 	}
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	var opts []grpc.ServerOption
 	//	opts = append(opts, grpc.MaxConcurrentStreams(2000000))
 	gServer := grpc.NewServer(opts...)
